@@ -1,0 +1,158 @@
+# Function Calling Fine-tuning Tutorial
+
+This repository builds on the nanoGPT repository from Karpathy and focuses on fine-tuning from scratch without using Huggingface, with function calling as an example use case. The project contains materials and code for fine-tuning language models to perform function calling, specifically training models to convert natural language commands into structured function calls for vehicle climate control systems.
+
+## Overview
+
+Function calling enables language models to respond to user queries by producing structured JSON outputs that can be used to invoke specific functions rather than generating natural language responses. This repository demonstrates how to:
+
+1. Fine-tune a language model to recognize when to use function calls
+2. Parse natural language requests into properly formatted function arguments
+
+## Repository Structure
+
+```
+fc_finetune/
+├── outputs/
+│   └── samples/
+│       └── val_sample.txt      # Validation examples with actual vs predicted outputs
+├── [training scripts]          # Scripts for fine-tuning models
+```
+
+## Example Function Calls
+
+This project demonstrates function calling for vehicle climate control commands, including:
+
+- Temperature adjustment: `set_temperature`
+- Fan speed control: `set_fan_speed`, `adjust_fan_speed`
+- Zone-specific climate control for different passenger positions
+
+Example function call format:
+```json
+{"name": "set_temperature", "arguments": "{'temperature': 68, 'unit': 'fahrenheit'}"}
+```
+
+## Usage
+
+### Prerequisites
+
+- Access to a language model that supports fine-tuning --> the model used in this tutorial can be downloaded from https://drive.google.com/file/d/10uuBUBYiOa1EODyfz6MVWSsEhKWGre2x/view?usp=sharing
+- Python environment with appropriate ML libraries --> specified in requirements.txt
+- Training data with examples of user requests and corresponding function calls --> included in this repository in model_data folder
+
+### Fine-tuning Process
+
+1. Prepare your training data with paired examples of:
+   - User requests in natural language
+   - Corresponding function calls in JSON format
+   
+2. Run the fine-tuning script:
+   ```bash
+   python train.py --pretrained_dir=/path/to/model --fc_data_dir=/path/to/data
+   ```
+
+3. Evaluate the model using validation data
+
+4. Deploy the fine-tuned model for inference
+
+## Validation Results
+
+The val_sample.txt file shows examples of how the model performs on validation data, comparing:
+- The input user command
+- The expected function call (Actual)
+- The model's prediction (Predicted)
+
+## Function Calling Fine-tuning Walkthrough
+
+This section explains the step-by-step process of what happens when you run train.py.
+
+### 1. Argument Parsing and Configuration
+
+The script accepts two required arguments:
+- `--pretrained_dir`: Path to the pretrained model checkpoint
+- `--fc_data_dir`: Path to the function calling training data
+
+A `Config` object stores all training parameters:
+- Model parameters (dropout rate, block size)
+- Training hyperparameters (learning rate, batch size, warmup steps)
+- Output directories and evaluation settings
+
+### 2. Trainer Initialization
+
+The `GPTTrainer` class is instantiated with the configuration, which:
+
+1. **Sets up distributed training**
+   - Configures DDP if multiple GPUs are used
+   - Sets up device, precision, and random seeds
+
+2. **Initializes the model**
+   - Loads weights from the pretrained checkpoint
+   - Adjusts dropout for fine-tuning
+   - Configures optimizer (AdamW with weight decay)
+   - Compiles the model if enabled
+
+3. **Prepares the datasets**
+   - Loads function calling training and validation data
+   - Wraps them in `CustomDataset` class
+   - Creates DataLoaders with appropriate samplers
+
+### 3. Training Loop
+
+The `train()` method executes the main training loop:
+
+For each iteration:
+
+1. **Data Processing**
+   - Fetches batches of input/output token sequences
+   - Processes padding and prompt masks
+   - Moves data to the appropriate device
+
+2. **Learning Rate Scheduling**
+   - Applies warmup and cosine decay
+
+3. **Evaluation and Checkpointing**
+   - Every `eval_interval` steps, evaluates on validation data
+   - Saves checkpoints when validation loss improves
+   - Every `sample_interval` steps, generates example outputs
+
+4. **Forward and Backward Passes**
+   - Performs gradient accumulation steps
+   - Applies mixed precision where available
+   - Clips gradients to prevent explosion
+   - Updates model parameters
+
+5. **Logging**
+   - Records loss values, timing, and MFU (Model FLOPs Utilization)
+
+### 4. Output Generation
+
+The training process produces:
+- Model checkpoints in the specified output directory
+- Sample files showing model predictions vs. actual outputs
+- Training logs with loss metrics
+
+## Sample Output Format
+
+As seen in `val_sample.txt`, the model learns to convert natural language commands like:
+
+```
+Turn the temperature up to 68 degrees Fahrenheit.
+```
+
+Into structured function calls:
+
+```
+<functioncall> {"name": "set_temperature", "arguments": "{'temperature': 68, 'unit': 'fahrenheit'}"} 
+```
+
+This allows the language model to interface with external systems through well-defined API calls rather than generating free-form text responses.
+
+## Key Components
+
+- **Encoder**: Handles tokenization and detokenization
+- **CustomDataset**: Manages data preparation with masking for prompt and padding tokens
+- **GPT Model**: The core transformer model being fine-tuned
+- **Mixed Precision Training**: Uses torch.amp for efficiency on modern GPUs
+- **Distributed Training**: Supports multi-GPU training with DDP
+
+This architecture delivers efficient fine-tuning for function calling capabilities in language models.

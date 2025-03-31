@@ -1,0 +1,7 @@
+azureml-mlflow==1.58.*
+mlflow-skinny==2.18.*
+pytz==2024.2
+torch==2.4.*
+numpy
+datasets
+tiktoken
